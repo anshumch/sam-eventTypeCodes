@@ -13,16 +13,16 @@ env:
   PIPELINE_USER_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   PIPELINE_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   SAM_TEMPLATE: template.yaml
-  DEV_STACK_NAME: sam-event-type-codes-test-stack
+  DEV_STACK_NAME: eventTypeCodes-stack-dev
   DEV_PIPELINE_EXECUTION_ROLE: arn:aws:iam::671988570539:role/aws-sam-cli-managed-dev-pipe-PipelineExecutionRole-1OJU1A08DFDDS
   DEV_CLOUDFORMATION_EXECUTION_ROLE: arn:aws:iam::671988570539:role/aws-sam-cli-managed-dev-p-CloudFormationExecutionR-UKJAKJERY9N4
   DEV_ARTIFACTS_BUCKET: aws-sam-cli-managed-dev-pipeline-artifactsbucket-16zbl8o2x77wb
   # If there are functions with "Image" PackageType in your template,
   # uncomment the line below and add "--image-repository ${DEV_IMAGE_REPOSITORY}" to
-  # DEV "sam package" and "sam deploy" commands.
-  # DEV_IMAGE_REPOSITORY = '0123456789.dkr.ecr.region.amazonaws.com/repository-name'
+  # testing "sam package" and "sam deploy" commands.
+  # TESTING_IMAGE_REPOSITORY = '0123456789.dkr.ecr.region.amazonaws.com/repository-name'
   DEV_REGION: us-east-1
-  TEST_STACK_NAME: sam-event-type-codes-test-stack
+  TESTING_STACK_NAME: eventTypeCodes-stack-test
   TESTING_PIPELINE_EXECUTION_ROLE: arn:aws:iam::830556781002:role/aws-sam-cli-managed-test-pip-PipelineExecutionRole-N3ENUDZNOUON
   TESTING_CLOUDFORMATION_EXECUTION_ROLE: arn:aws:iam::830556781002:role/aws-sam-cli-managed-test-CloudFormationExecutionR-1CY7BZ3S0HJSF
   TESTING_ARTIFACTS_BUCKET: aws-sam-cli-managed-test-pipeline-artifactsbucket-16uamoyqyjo83
@@ -31,7 +31,7 @@ env:
   # testing "sam package" and "sam deploy" commands.
   # TESTING_IMAGE_REPOSITORY = '0123456789.dkr.ecr.region.amazonaws.com/repository-name'
   TESTING_REGION: us-east-1
-  PROD_STACK_NAME: sam-event-type-codes-prod-stack
+  PROD_STACK_NAME: eventTypeCodes-stack-prod
   PROD_PIPELINE_EXECUTION_ROLE: arn:aws:iam::933380251238:role/aws-sam-cli-managed-prod-pip-PipelineExecutionRole-19OTFSB2NH5YJ
   PROD_CLOUDFORMATION_EXECUTION_ROLE: arn:aws:iam::933380251238:role/aws-sam-cli-managed-prod-CloudFormationExecutionR-SV4RWKAYH3VY
   PROD_ARTIFACTS_BUCKET: aws-sam-cli-managed-prod-pipeline-artifactsbucket-1s66h0tgbv9ow
@@ -63,9 +63,9 @@ jobs:
         with:
           aws-access-key-id: ${{ env.PIPELINE_USER_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ env.PIPELINE_USER_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.TESTING_REGION }}
-          role-to-assume: ${{ env.TESTING_PIPELINE_EXECUTION_ROLE }}
-          role-session-name: testing-packaging
+          aws-region: ${{ env.DEV_REGION }}
+          role-to-assume: ${{ env.DEV_PIPELINE_EXECUTION_ROLE }}
+          role-session-name: dev-packaging
           role-duration-seconds: 3600
           role-skip-session-tagging: true
 
@@ -74,8 +74,8 @@ jobs:
           FEATURE_BRANCH_NAME: ${{ github.event.ref }}
         run: |
           sam delete \
-            --stack-name $(echo ${FEATURE_BRANCH_NAME##*/} | tr -cd '[a-zA-Z0-9-]') \
-            --region ${TESTING_REGION} \
+            --stack-name ${DEV_STACK_NAME} \
+            --region ${DEV_REGION} \
             --no-prompts
 
   build-and-deploy-feature:
@@ -95,21 +95,22 @@ jobs:
         with:
           aws-access-key-id: ${{ env.PIPELINE_USER_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ env.PIPELINE_USER_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.TESTING_REGION }}
-          role-to-assume: ${{ env.TESTING_PIPELINE_EXECUTION_ROLE }}
+          aws-region: ${{ env.DEV_REGION }}
+          role-to-assume: ${{ env.DEV_PIPELINE_EXECUTION_ROLE }}
           role-session-name: feature-deployment
           role-duration-seconds: 3600
           role-skip-session-tagging: true
 
-      - name: Deploy to feature stack in the testing account
+      - name: Deploy to feature stack in the dev account
         shell: bash
         run: |
-          sam deploy --stack-name $(echo ${GITHUB_REF##*/} | tr -cd '[a-zA-Z0-9-]') \
+          sam deploy --stack-name ${DEV_STACK_NAME} \
+            --parameter-overrides Stage=dev \
             --capabilities CAPABILITY_IAM \
-            --region ${TESTING_REGION} \
-            --s3-bucket ${TESTING_ARTIFACTS_BUCKET} \
+            --region ${DEV_REGION} \
+            --s3-bucket ${DEV_ARTIFACTS_BUCKET} \
             --no-fail-on-empty-changeset \
-            --role-arn ${TESTING_CLOUDFORMATION_EXECUTION_ROLE}
+            --role-arn ${DEV_CLOUDFORMATION_EXECUTION_ROLE}
 
   build-and-package:
     if: github.ref == 'refs/heads/main'
@@ -195,6 +196,7 @@ jobs:
       - name: Deploy to testing account
         run: |
           sam deploy --stack-name ${TESTING_STACK_NAME} \
+            --parameter-overrides Stage=test \
             --template packaged-testing.yaml \
             --capabilities CAPABILITY_IAM \
             --region ${TESTING_REGION} \
@@ -240,6 +242,7 @@ jobs:
       - name: Deploy to production account
         run: |
           sam deploy --stack-name ${PROD_STACK_NAME} \
+            --parameter-overrides Stage=prod \
             --template packaged-prod.yaml \
             --capabilities CAPABILITY_IAM \
             --region ${PROD_REGION} \
