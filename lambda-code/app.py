@@ -65,7 +65,7 @@ def lambda_handler(event, context):
     # print(eventTypeCodes)
    
     bodyJson = {}
-    bodyJson["message"] = "Succeeded"
+    bodyJson["message"] = "Succeeded!"
     bodyJson["eventTypeCodes"] = eventTypeCodes
 
     return {
